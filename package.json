@@ -1,0 +1,24 @@
+{
+  "name": "directorops-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DirectorOps: Autonomous Master Control Room (MCR) SRE for Live Cinema Broadcasts",
+  "scripts": {
+    "dev:backend": "cd backend && python -m uvicorn app.main:app --port 8000 --reload",
+    "dev:frontend": "cd frontend && npm run dev",
+    "verify": "python verify_in_60s.py",
+    "test:backend": "cd backend && python -m pytest tests -v"
+  },
+  "keywords": [
+    "google-cloud",
+    "gemini",
+    "adk",
+    "grafana",
+    "mcp",
+    "hackathon",
+    "broadcast",
+    "sre"
+  ],
+  "author": "DirectorOps Contributors",
+  "license": "MIT"
+}
