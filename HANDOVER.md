@@ -268,3 +268,41 @@ The Master Control Room dashboard provides 3 realistic broadcast failure scenari
 
 ### Q: Does the agent have permissions to execute arbitrary bash commands?
 **A**: No. Broadcast pipelines require strict deterministic boundaries. All remediations are restricted to typed functions (`execute_failover`, `create_annotation`, `query_prometheus`, `query_loki`). Arbitrary shell execution is disallowed by design.
+
+---
+
+## 8. Current Session Checkpoint & Resumption Instructions
+
+### 8.1 State of the Repository
+- **Git Branch**: `main` (clean working tree, fully synced with `origin/main`).
+- **Latest Commit**: `bb22bb8` (`docs(handover): add comprehensive operational handover playbook in HANDOVER.md`).
+- **Backend Tests**: 4/4 passing (`test_agent.py`, `test_mcp.py`, `test_proof.py`, `test_telemetry.py`).
+- **60-Second CPU Reproducer**: 6/6 checks passing in **0.43ms** (`verify_in_60s.py`).
+- **Frontend State**: Next.js 15 App Router, React 19, Tailwind CSS. Studio components created: `Header.tsx`, `LiveMonitor.tsx`, `SignalTopology.tsx`, `TelemetryHUD.tsx`, `AgentDrawer.tsx`, `ReceiptModal.tsx`, and `page.tsx`.
+
+### 8.2 Exact Commands to Resume in a New Session
+```bash
+# 1. Pull latest changes if needed
+git pull origin main
+
+# 2. Verify backend & 60s reproducer
+python verify_in_60s.py
+cd backend && python -m pytest tests -v && cd ..
+
+# 3. Start backend
+cd backend
+uvicorn app.main:app --reload --port 8000
+
+# 4. In a second terminal, start frontend
+cd frontend
+npm run dev
+```
+
+### 8.3 Recommended Immediate Next Steps
+1. **Frontend Polish & Visual Quality Check**: Test UI at `http://localhost:3000` to confirm live canvas audio spectrum, SVG topology failover pulses, and SSE incident stream.
+2. **Expand Standalone Verifier**: Add CLI flags or multi-scenario verification (`python verify_in_60s.py --scenario cdn_edge_502`).
+3. **Deploy Hosted Instances**:
+   - Frontend to Vercel (`vercel`).
+   - Backend to Google Cloud Run or Render.
+4. **Record 3-Minute Demo Video**: Follow the structured script in `README.md#the-3-minute-pitch-video-script`.
+
