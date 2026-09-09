@@ -36,9 +36,9 @@ directorops/
 │   │   ├── config.py              # Pydantic v2 settings (DEMO_MODE, GEMINI_API_KEY)
 │   │   ├── main.py                # FastAPI gateway, REST endpoints, SSE event stream
 │   │   ├── agent/
-│   │   │   └── mcr_agent.py       # Google Cloud Gemini 2.0 ReAct orchestrator
+│   │   │   └── mcr_agent.py       # Google Cloud Gemini 3.8 Flash ReAct orchestrator
 │   │   ├── mcp/
-│   │   │   └── grafana_mcp.py     # Official Grafana Cloud MCP JSON-RPC 2.0 client
+│   │   │   └── grafana_mcp.py     # Official open-source mcp-grafana client via stdio transport
 │   │   ├── receipts/
 │   │   │   └── proof_engine.py    # HMAC-SHA256 mitigation proof receipt generator
 │   │   └── telemetry/
@@ -127,17 +127,17 @@ VERIFICATION RECEIPT STATUS: 100% DETERMINISTIC CPU VALIDATION
    ```
    *In `.env`:*
    ```env
-   # To use Live Google Gemini 2.0 Flash:
+   # To use Live Google Gemini 3.8 Flash:
    GEMINI_API_KEY=your_gemini_api_key_here
+   GEMINI_MODEL=gemini-3.8-flash
 
-   # To connect to live Grafana Cloud MCP:
+   # To connect to live Grafana Cloud via official mcp-grafana server:
    GRAFANA_URL=https://your-instance.grafana.net
-   GRAFANA_SA_TOKEN=your_grafana_service_account_token_here
-   GRAFANA_MCP_SERVER_URL=https://mcp.grafana.com/mcp
+   GRAFANA_SA_TOKEN=glsa_your_service_account_token_here
 
    # Demo Mode (defaults to True if keys are unset):
    DEMO_MODE=True
-   RECEIPT_SECRET_KEY=directorops-broadcast-secret-key-2026
+   SECRET_KEY=directorops-broadcast-secret-key-2026
    ```
 
 4. **Run Backend Test Suites**:
@@ -254,7 +254,7 @@ The Master Control Room dashboard provides 3 realistic broadcast failure scenari
 | **Agent Specification** | [`AGENTS.md`](AGENTS.md) | COMPLETE |
 | **Honesty Table** | [`HONESTY_TABLE.md`](HONESTY_TABLE.md) | COMPLETE |
 | **Design Specifications** | [`DESIGN.MD`](DESIGN.MD) | COMPLETE |
-| **3-Minute Pitch Script** | Included in [`README.md`](README.md#the-3-minute-pitch-video-script) | READY FOR RECORDING |
+| **3-Minute Pitch Script** | [`PITCH_SCRIPT.md`](PITCH_SCRIPT.md) | READY FOR RECORDING |
 
 ---
 
@@ -263,7 +263,7 @@ The Master Control Room dashboard provides 3 realistic broadcast failure scenari
 ### Q: Why does `verify_in_60s.py` not require `pip install google-genai` or `pip install grafana-mcp`?
 **A**: Hackathon judges often review dozens of submissions and do not have the time or credentials to provision Google Cloud service accounts or paid Grafana Cloud instances. `verify_in_60s.py` provides a deterministic reproduction of the exact telemetry degradation, PromQL/LogQL MCP schemas, failover math, and HMAC signature algorithms using Python's standard library so any judge can verify the engine in milliseconds.
 
-### Q: Can I run with live Google Cloud Gemini 2.0 and live Grafana Cloud?
+### Q: Can I run with live Google Cloud Gemini 3.8 Flash and live Grafana Cloud?
 **A**: Yes! Simply provide `GEMINI_API_KEY` and your `GRAFANA_SA_TOKEN` in `backend/.env`. The system detects live credentials and switches from the embedded fallback engine to live API execution.
 
 ### Q: Does the agent have permissions to execute arbitrary bash commands?
@@ -304,5 +304,5 @@ npm run dev
 3. **Deploy Hosted Instances**:
    - Frontend to Vercel (`vercel`).
    - Backend to Google Cloud Run or Render.
-4. **Record 3-Minute Demo Video**: Follow the structured script in `README.md#the-3-minute-pitch-video-script`.
+4. **Record 3-Minute Demo Video**: Follow the structured script in [`PITCH_SCRIPT.md`](PITCH_SCRIPT.md).
 

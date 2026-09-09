@@ -8,8 +8,8 @@
 **DirectorOps** deploys an autonomous, high-reliability agentic system designed to operate in ultra-low latency broadcast and virtual production control rooms. It continuously monitors live 4K/UHD video pipelines, autonomously diagnoses anomalies using **Grafana Cloud Model Context Protocol (MCP)**, coordinates atomic failovers across SDI/IP routing matrices, and seals resolution proofs via cryptographic receipts.
 
 ### 1.1 Model & Framework Alignment
-- **Permitted LLM Core**: Google Cloud Gemini 2.0 (`gemini-2.0-flash` / `gemini-2.0-pro-exp`) via the official Google GenAI SDK (`google-genai`).
-- **Protocol Protocol**: Model Context Protocol (MCP JSON-RPC 2.0) interacting with Grafana Cloud.
+- **Permitted LLM Core**: Google Cloud Gemini 3.8 Flash (`gemini-3.8-flash`) via the official Google GenAI SDK (`google-genai`).
+- **Observability Protocol**: Model Context Protocol (MCP JSON-RPC 2.0) via the official open-source `mcp-grafana` server over stdio transport.
 - **Orchestration Pattern**: Asynchronous multi-turn ReAct (Reasoning + Acting) loop with structured function declarations.
 - **Fail-Safe Mechanism**: Zero-dependency deterministic offline fallback engine ensuring 100% operational uptime and sub-5ms CPU verification for evaluation.
 
@@ -28,7 +28,7 @@
  │  Observability Hub │       │   Reasoning Hub    │       │  Remediation Hub   │
  └────────────────────┘       └────────────────────┘       └────────────────────┘
            │                            │                            │
-           ├─ Ingest Telemetry          ├─ Gemini 2.0 Flash          ├─ SDI Router Matrix
+           ├─ Ingest Telemetry          ├─ Gemini 3.8 Flash          ├─ SDI Router Matrix
            ├─ PromQL Time-Series        ├─ Multi-turn ReAct          ├─ Pod Ingest Swap
            └─ Loki Log Analysis         └─ Tool Invocation           └─ HMAC Proof Seal
 ```
@@ -37,13 +37,13 @@
 
 1. **`MCRAgent` (`backend/app/agent/mcr_agent.py`)**:
    - Master orchestrator managing incident lifecycles from detection to proof generation.
-   - Instantiates the Gemini 2.0 client session with typed function tools.
+   - Instantiates the Gemini 3.8 Flash client session with typed function tools.
    - Yields asynchronous SSE events (`ALERT_INGEST`, `AGENT_REASONING`, `TOOL_CALL`, `TOOL_RESULT`, `AGENT_DECISION`, `FAILOVER_EXECUTED`, `MITIGATION_RECEIPT`) for live UI streaming.
 
 2. **`GrafanaMCPClient` (`backend/app/mcp/grafana_mcp.py`)**:
-   - Manages JSON-RPC 2.0 sessions with the Grafana Cloud MCP server (`https://mcp.grafana.com/mcp` or local stdio).
-   - Formats PromQL metric queries against Prometheus instances.
-   - Formats LogQL log inspection queries against Grafana Loki.
+   - Manages MCP stdio sessions with the official open-source `mcp-grafana` server using a Grafana Service Account token (`glsa_...`).
+   - Executes instant PromQL metric queries against Grafana Cloud Prometheus.
+   - Executes LogQL log inspection queries against Grafana Cloud Loki.
    - Dispatches incident timeline annotations with cryptographic hashes.
 
 3. **`BroadcastTelemetryEngine` (`backend/app/telemetry/telemetry_engine.py`)**:
@@ -229,3 +229,48 @@ Emits an annotated incident marker on the active Grafana Cloud dashboard.
 1. **Non-Destructive Routing**: The agent never tears down active infrastructure; it performs atomic hot-standby failovers with state preservation.
 2. **Deterministic Fallback**: In environments without active Google Cloud or Grafana Cloud API keys, the agent seamlessly transitions to an embedded deterministic engine that mimics exact tool responses in < 5ms.
 3. **Cryptographic Accountability**: Every action produces an HMAC-signed audit receipt containing input states, tool outputs, and post-mitigation telemetry verification.
+
+---
+
+## 7. DirectorOps Workspace Engineering Invariants (Quality Rules)
+
+All agents, contributors, and automated subagents working within the **DirectorOps** codebase must strictly adhere to the following 5 engineering invariants:
+
+### 7.1 Preserve Verified Integrations
+- **Zero Regressions**: Never break, bypass, or regress existing verified integrations:
+  - FastAPI SSE Event Stream (`backend/app/main.py` -> `/api/events`) with standard event types (`ALERT_INGEST`, `AGENT_REASONING`, `TOOL_CALL`, `TOOL_RESULT`, `AGENT_DECISION`, `FAILOVER_EXECUTED`, `MITIGATION_RECEIPT`).
+  - Grafana MCP Stdio Client (`backend/app/mcp/grafana_mcp.py`) via official open-source `mcp-grafana` server over JSON-RPC 2.0 stdio with strict `GrafanaMCPError` handling.
+  - Gemini 3.8 Flash ReAct Agent (`backend/app/agent/mcr_agent.py`) via Google GenAI SDK (`google-genai`).
+  - Cryptographic Proof Engine (`backend/app/receipts/proof_engine.py`) with SHA-256 state hashing and HMAC-SHA256 signature sealing.
+  - Standalone 60-Second CPU Verifier (`verify_in_60s.py`) executing in < 5ms on Python standard library.
+- **Verification Requirement**: Run `python verify_in_60s.py` and `pytest backend/tests/` after touching backend, telemetry, or agent code. Typed tool call schemas (`query_prometheus`, `query_loki`, `execute_failover`, `create_annotation`) must remain immutable contracts.
+
+### 7.2 Never Substitute Fake Frontend Behavior
+- **Real Backend Ingestion Only**: All agent thought streaming, tool execution steps, and failover notifications must originate from real backend Server-Sent Events (`/api/events`) or real REST endpoints (`/api/scenarios/trigger`).
+- **No Client-Side Mocking**: `setTimeout` or `setInterval` mock progression ladders in React components, fake progress bars, or client-side synthetic tool call progressions are strictly forbidden. If backend streaming is disconnected, the UI must render an explicit disconnected/reconnecting state.
+- **Action Triggers**: "Deploy SRE", "Inject Anomaly", or manual failovers must dispatch actual HTTP POST requests to the FastAPI backend, and state updates must flow strictly from backend event reception.
+
+### 7.3 Clearly Distinguish Live and Simulated States
+- **Radical Honesty (`HONESTY_TABLE.md`)**: Maintain clear, unambiguous distinctions between live cloud infrastructure and staged/simulated layers in both code and UI.
+- **Explicit Labeling**:
+  - Tally indicators and status pills must clearly state operating mode: `LIVE CLOUD (GEMINI 3.8 FLASH)` vs. `DETERMINISTIC OFFLINE ENGINE`, and `LIVE GRAFANA MCP (STDIO)` vs. `STAGED PROMQL/LOGQL EMULATOR`.
+  - The routing matrix must be designated as a `VIRTUAL SDI ROUTER MATRIX` (never misrepresent synthetic telemetry or software state machines as physical 12G-SDI hardware).
+  - Never mislead hackathon judges, operators, or users regarding live cloud API execution versus local deterministic emulation.
+
+### 7.4 Avoid Generic Cyberpunk Dashboard Patterns
+- **Adhere to `DESIGN.MD`**: Reject generic "cyberpunk / sci-fi hacker" tropes: random hex grids, gratuitous neon magenta/pink laser borders, unreadable decorative pseudo-code rain, spinning wireframe globes, or low-contrast neon-on-black text.
+- **Minimalist Dark Studio Switcher**: Benchmark against Blackmagic ATEM Television Studio, Linear (Dark Zinc), and Datadog Incident Command.
+- **Visual Standards**:
+  - Palette: Deep obsidian canvas (`#09090b`), surfaces (`#121215`, `#18181c`), subtle borders (`#27272a`), and broadcast semantic accents (SMPTE Red `#ef4444`, Nominal Green `#10b981`, Amber `#f59e0b`, Agent Cyan `#38bdf8`, Grafana Orange `#f97316`).
+  - Density & Typography: Dense dual-row Bento Grid layout (`posts.design` / `navbar.gallery`), interface sans (`Inter`/`Geist Sans`) paired with monospace (`Geist Mono`) for SMPTE timecodes and metrics.
+  - Real Canvas Spectrum: 24-bin Web Audio API `<canvas>` spectrum, chromatic aberration video glitch shader during packet loss spikes, and clean SVG bezier signal routing paths (`60fps.design`).
+
+### 7.5 Require Browser Screenshots Plus Visual Critique Before Calling UI Work Complete
+- **Mandatory Visual Inspection**: No frontend feature, styling refinement, or bugfix is complete until it has been visually inspected in a real browser.
+- **Verification Protocol**:
+  1. Verify the frontend and backend servers are running.
+  2. Use browser automation (Chrome DevTools MCP / browser tools) to load `http://localhost:3000`.
+  3. Capture high-resolution viewport screenshots across key views: nominal steady-state HUD, active incident/glitch state, streaming Gemini agent drawer, and cryptographic receipt modal.
+  4. Perform a rigorous visual critique evaluating metric readability, alignment, border contrast, tally light glows, and responsive behavior.
+  5. Document the screenshot evidence and visual critique before concluding UI tasks. Never declare frontend work done based solely on `tsc` compilation or test suite passes.
+

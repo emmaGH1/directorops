@@ -4,7 +4,7 @@ from typing import Optional
 class Settings(BaseSettings):
     DEMO_MODE: bool = True
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-3.8-flash"
     
     # Grafana Cloud Settings
     GRAFANA_URL: str = "https://demo.grafana.net"
@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     GRAFANA_LOKI_USER: Optional[str] = None
     
     # Server Settings
-    PORT: int = 8000
+    PORT: int = 8001
     HOST: str = "0.0.0.0"
     SECRET_KEY: str = "directorops-secret-hmac-key-2026"
 

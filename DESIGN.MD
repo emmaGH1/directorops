@@ -80,7 +80,7 @@ This document establishes the official visual design tokens, layout bento grid, 
 │  - SMPTE OSD, Glitch Shaders     │  - Animated Failover to Enc 02      │
 ├──────────────────────────────────┼─────────────────────────────────────┤
 │  ROW 2 LEFT (50% Width)          │  ROW 2 RIGHT (50% Width)            │
-│  PromQL Telemetry Sparklines HUD │  Gemini 2.0 ReAct Terminal          │
+│  PromQL Telemetry Sparklines HUD │  Gemini 3.8 Flash ReAct Terminal    │
 │  - Live SVG Time-Series Curves   │  - Linear-Style Step Stream         │
 │  - Bitrate, FPS, Loss %, PTS     │  - Expandable MCP JSON-RPC Payloads │
 │  - Click-to-Inspect PromQL Query │  - Cryptographic Receipt Trigger    │

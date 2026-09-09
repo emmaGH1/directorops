@@ -1,129 +1,142 @@
+import os
+import sys
 import time
 import json
-import httpx
+import asyncio
 from typing import Dict, Any, List, Optional
 from app.config import settings
 from app.telemetry.telemetry_engine import telemetry_engine
 
+class GrafanaMCPError(Exception):
+    """Raised when an active Grafana Cloud MCP request fails."""
+    pass
+
 class GrafanaMCPClient:
     """
-    Official Model Context Protocol (MCP) JSON-RPC 2.0 client for Grafana Cloud MCP Server.
-    Provides PromQL, LogQL, dashboard search, and annotation tools.
-    Supports dual execution: Live Grafana Cloud endpoint or embedded high-fidelity engine.
+    Official Model Context Protocol (MCP) client for Grafana Cloud.
+    Route: Option 2 — Official open-source mcp-grafana server with Service Account Token.
+    Supports unattended server-side execution via stdio transport.
+    Strictly prohibits sending service account tokens to hosted OAuth endpoints.
     """
     def __init__(self, base_url: Optional[str] = None, token: Optional[str] = None):
         self.base_url = (base_url or settings.GRAFANA_URL).rstrip("/")
         self.token = token or settings.GRAFANA_SA_TOKEN
         self.is_live = bool(self.token and not settings.DEMO_MODE)
-        self.mcp_endpoint = "https://mcp.grafana.com/mcp"
-        self.headers = {
-            "Authorization": f"Bearer {self.token}",
-            "X-Grafana-URL": self.base_url,
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        } if self.token else {"Content-Type": "application/json"}
+        self.binary_path = self._resolve_binary_path()
+
+    def _resolve_binary_path(self) -> str:
+        candidates = [
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "bin", "mcp-grafana.exe")),
+            os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "bin", "mcp-grafana")),
+            "mcp-grafana.exe",
+            "mcp-grafana"
+        ]
+        for c in candidates:
+            if os.path.exists(c):
+                return c
+        return "mcp-grafana"
+
+    def _get_server_params(self):
+        from mcp import StdioServerParameters
+        env = os.environ.copy()
+        if self.base_url:
+            env["GRAFANA_URL"] = self.base_url
+        if self.token:
+            env["GRAFANA_SERVICE_ACCOUNT_TOKEN"] = self.token
+            env["GRAFANA_SA_TOKEN"] = self.token
+        return StdioServerParameters(command=self.binary_path, args=[], env=env)
 
     async def list_tools(self) -> List[Dict[str, Any]]:
-        """MCP JSON-RPC: tools/list"""
+        """MCP tools/list via official mcp-grafana stdio session."""
         if self.is_live:
+            from mcp import ClientSession
+            from mcp.client.stdio import stdio_client
             try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    resp = await client.post(
-                        self.mcp_endpoint,
-                        headers=self.headers,
-                        json={"jsonrpc": "2.0", "method": "tools/list", "params": {}, "id": 1}
-                    )
-                    if resp.status_code == 200:
-                        return resp.json().get("result", {}).get("tools", [])
-            except Exception:
-                pass
+                server_params = self._get_server_params()
+                async with stdio_client(server_params) as (read, write):
+                    async with ClientSession(read, write) as session:
+                        await session.initialize()
+                        resp = await session.list_tools()
+                        return [{"name": t.name, "description": t.description, "inputSchema": t.inputSchema} for t in resp.tools]
+            except Exception as e:
+                raise GrafanaMCPError(f"Live mcp-grafana stdio tools/list failed: {str(e)}")
 
         return [
             {"name": "query_prometheus", "description": "Execute instant PromQL query over broadcast cluster metrics"},
-            {"name": "query_loki", "description": "Execute LogQL stream search over transcoder and CDN edge logs"},
+            {"name": "query_loki_logs", "description": "Execute LogQL stream search over transcoder and CDN edge logs"},
             {"name": "create_annotation", "description": "Write incident mitigation marker to Grafana Cloud dashboard"},
-            {"name": "list_alerts", "description": "Query active firing alerts from Grafana Alertmanager"}
+            {"name": "check_datasources_health", "description": "Check datasource health across Grafana Cloud stack"},
+            {"name": "user_info", "description": "Inspect authenticated service account identity in Grafana Cloud"}
         ]
 
-    async def query_prometheus(self, query: str) -> Dict[str, Any]:
-        """
-        MCP Tool: query_prometheus
-        Sends MCP JSON-RPC 2.0 tools/call payload to Grafana Cloud.
-        """
-        payload = {
-            "jsonrpc": "2.0",
-            "method": "tools/call",
-            "params": {
-                "name": "query_prometheus",
-                "arguments": {"query": query}
-            },
-            "id": int(time.time() * 1000)
-        }
+    async def call_tool(self, name: str, arguments: Optional[Dict[str, Any]] = None) -> Any:
+        """Invokes a tool on the official mcp-grafana server with strict non-mocking error handling."""
+        arguments = arguments or {}
+        if not self.is_live:
+            raise GrafanaMCPError(f"Cannot execute live tool '{name}' while in DEMO_MODE=True or without token.")
 
+        from mcp import ClientSession
+        from mcp.client.stdio import stdio_client
+        try:
+            server_params = self._get_server_params()
+            async with stdio_client(server_params) as (read, write):
+                async with ClientSession(read, write) as session:
+                    await session.initialize()
+                    res = await session.call_tool(name, arguments)
+                    if getattr(res, "isError", False):
+                        err_text = " ".join(c.text for c in res.content if hasattr(c, "text"))
+                        raise GrafanaMCPError(f"Live mcp-grafana tool '{name}' failed: {err_text}")
+                    if hasattr(res, "content") and res.content:
+                        first = res.content[0]
+                        if hasattr(first, "text"):
+                            try:
+                                return json.loads(first.text)
+                            except Exception:
+                                return first.text
+                    return res
+        except GrafanaMCPError:
+            raise
+        except Exception as e:
+            raise GrafanaMCPError(f"Live mcp-grafana execution error on '{name}': {str(e)}")
+
+    async def query_prometheus(self, query: str, datasource_uid: Optional[str] = None) -> Dict[str, Any]:
+        """MCP Tool: query_prometheus"""
         if self.is_live:
-            try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    resp = await client.post(self.mcp_endpoint, headers=self.headers, json=payload)
-                    if resp.status_code == 200:
-                        return resp.json().get("result", {})
-            except Exception:
-                pass
+            args = {
+                "datasourceUid": datasource_uid or "grafanacloud-prom",
+                "expr": query,
+                "queryType": "instant",
+                "endTime": "now"
+            }
+            res = await self.call_tool("query_prometheus", args)
+            return res if isinstance(res, dict) else {"status": "success", "raw": res}
 
         return self._simulate_promql(query)
 
-    async def query_loki(self, query: str, limit: int = 20) -> Dict[str, Any]:
-        """
-        MCP Tool: query_loki
-        Sends MCP JSON-RPC 2.0 tools/call payload to Grafana Cloud.
-        """
-        payload = {
-            "jsonrpc": "2.0",
-            "method": "tools/call",
-            "params": {
-                "name": "query_loki",
-                "arguments": {"query": query, "limit": limit}
-            },
-            "id": int(time.time() * 1000)
-        }
-
+    async def query_loki(self, query: str, limit: int = 20, datasource_uid: Optional[str] = None) -> Dict[str, Any]:
+        """MCP Tool: query_loki_logs"""
         if self.is_live:
-            try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    resp = await client.post(self.mcp_endpoint, headers=self.headers, json=payload)
-                    if resp.status_code == 200:
-                        return resp.json().get("result", {})
-            except Exception:
-                pass
+            args = {
+                "datasourceUid": datasource_uid or "grafanacloud-logs",
+                "logql": query,
+                "limit": limit
+            }
+            res = await self.call_tool("query_loki_logs", args)
+            return res if isinstance(res, dict) else {"status": "success", "raw": res}
 
         return self._simulate_logql(query)
 
-    async def create_annotation(self, text: str, tags: List[str]) -> Dict[str, Any]:
-        """
-        MCP Tool: create_annotation
-        Writes official resolution tag to Grafana Cloud dashboard.
-        """
-        payload = {
-            "jsonrpc": "2.0",
-            "method": "tools/call",
-            "params": {
-                "name": "create_annotation",
-                "arguments": {
-                    "text": text,
-                    "tags": tags or ["directorops", "gemini-2.0", "incident-mitigated"],
-                    "time": int(time.time() * 1000)
-                }
-            },
-            "id": int(time.time() * 1000)
-        }
-
+    async def create_annotation(self, text: str, tags: Optional[List[str]] = None) -> Dict[str, Any]:
+        """MCP Tool: create_annotation"""
+        tags = tags or ["directorops", "gemini-3.8-flash", "incident-mitigated"]
         if self.is_live:
-            try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    resp = await client.post(self.mcp_endpoint, headers=self.headers, json=payload)
-                    if resp.status_code == 200:
-                        return resp.json().get("result", {})
-            except Exception:
-                pass
+            args = {
+                "text": text,
+                "tags": tags,
+                "time": int(time.time() * 1000)
+            }
+            res = await self.call_tool("create_annotation", args)
+            return res if isinstance(res, dict) else {"status": "success", "raw": res}
 
         return {
             "status": "success",

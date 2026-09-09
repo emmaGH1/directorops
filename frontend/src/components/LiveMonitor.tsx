@@ -1,14 +1,18 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { Film, Volume2, AlertOctagon, Maximize2, Radio, Eye } from "lucide-react";
+import { Volume2, AlertTriangle, Eye, EyeOff } from "lucide-react";
 
 interface LiveMonitorProps {
   status: string;
   fps: number;
   packetLoss: number;
   ptsDrift: number;
-  primaryEncoder: string;
+  primaryEncoder?: string;
+  primaryPod?: string;
+  isInvestigating?: boolean;
+  isConnected?: boolean;
+  activeScenario?: string | null;
 }
 
 export const LiveMonitor: React.FC<LiveMonitorProps> = ({
@@ -16,15 +20,20 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
   fps,
   packetLoss,
   ptsDrift,
-  primaryEncoder
+  primaryEncoder,
+  primaryPod,
+  isInvestigating = false,
+  isConnected = true,
+  activeScenario,
 }) => {
+  const encoderName = primaryEncoder || primaryPod || "transcoder-pod-us-east-01";
   const isDegraded = status === "DEGRADED";
-  const [timecode, setTimecode] = useState("01:42:19:12");
-  const [showSafeAreas, setShowSafeAreas] = useState(true);
+  const isRecovered = status === "RECOVERED";
+  const [timecode, setTimecode] = useState("01:24:18:04");
+  const [showSafeAreas, setShowSafeAreas] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
 
-  // SMPTE Timecode Clock
+  // SMPTE 12M Timecode Clock (60fps simulation)
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
@@ -37,7 +46,7 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
     return () => clearInterval(timer);
   }, []);
 
-  // Web Audio Visualizer Simulation (Real Canvas Frequency Bins)
+  // Web Audio Visualizer (24-bin canvas spectrum - quiet, functional)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -52,17 +61,20 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
       const barWidth = canvas.width / numBars - 2;
 
       for (let i = 0; i < numBars; i++) {
-        // Compute dynamic height based on time and audio frequency
-        let baseHeight = Math.sin(Date.now() * 0.005 + i * 0.4) * 0.5 + 0.5;
-        if (isDegraded) {
-          baseHeight *= (Math.random() > 0.4 ? 0.3 : 1.2); // erratic audio stutter
+        let baseHeight = Math.sin(Date.now() * 0.004 + i * 0.35) * 0.45 + 0.5;
+        if (!isConnected) {
+          baseHeight = 0.05; // flatline
+        } else if (isDegraded) {
+          // Believable audio frame jitter / stutter during packet drop
+          baseHeight *= Math.random() > 0.4 ? 0.3 : 1.15;
         }
-        const barHeight = Math.max(3, baseHeight * canvas.height * 0.85);
+        const barHeight = Math.max(2, baseHeight * canvas.height * 0.85);
 
-        // Color coding (green -> amber -> red)
-        let fillColor = "#10b981"; // nominal green
-        if (i > 18) fillColor = isDegraded ? "#ef4444" : "#f59e0b";
-        else if (i > 14) fillColor = "#f59e0b";
+        // Functional broadcast audio meter thresholds
+        let fillColor = "#10b981"; // -24dB to -6dB (nominal)
+        if (!isConnected) fillColor = "#52525b";
+        else if (i > 19) fillColor = isDegraded ? "#ef4444" : "#f59e0b"; // 0dB peak
+        else if (i > 15) fillColor = "#f59e0b"; // -6dB warning
 
         ctx.fillStyle = fillColor;
         ctx.fillRect(i * (barWidth + 2), canvas.height - barHeight, barWidth, barHeight);
@@ -73,125 +85,140 @@ export const LiveMonitor: React.FC<LiveMonitorProps> = ({
 
     renderSpectrum();
     return () => cancelAnimationFrame(animId);
-  }, [isDegraded]);
+  }, [isDegraded, isConnected]);
+
+  // Operational fault descriptions
+  let faultHeadline = "Hardware Buffer Overrun";
+  let faultDetail = `PTS desync: +${ptsDrift.toFixed(1)}ms • UDP packet loss: ${packetLoss.toFixed(1)}% • ${fps.toFixed(2)} FPS`;
+  if (activeScenario === "cdn_edge_502") {
+    faultHeadline = "CDN Edge Origin Gateway Timeout (502)";
+    faultDetail = `Origin packager backlog saturated • Edge cascade • ${fps.toFixed(2)} FPS`;
+  } else if (activeScenario === "genlock_clock_drift") {
+    faultHeadline = "SMPTE ST 2059-2 PTP Reference Drift";
+    faultDetail = `Grandmaster jitter 48.5µs • Field phase mismatch • PTS drift: +${ptsDrift.toFixed(1)}ms`;
+  }
 
   return (
-    <div className="relative w-full rounded-lg border border-[#27272a] bg-[#121215] overflow-hidden shadow-2xl flex flex-col font-mono">
-      {/* Monitor Header Strip */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-[#18181c] border-b border-[#27272a] text-[11px]">
-        <div className="flex items-center space-x-2">
-          <span className={`w-2 h-2 rounded-full ${isDegraded ? "bg-red-500 animate-pulse" : "bg-emerald-500"}`} />
-          <span className="font-bold text-zinc-200">PROGRAM (PGM 01)</span>
-          <span className="text-zinc-600">•</span>
-          <span className="text-zinc-400">4K DCI 3840x2160p @ {fps}fps</span>
+    <div className="relative w-full rounded-md border border-[#27272a] bg-[#121215] overflow-hidden flex flex-col">
+      {/* Broadcast Monitor Header Strip */}
+      <div className="flex items-center justify-between px-3.5 py-2 bg-[#18181c] border-b border-[#27272a] text-xs">
+        <div className="flex items-center space-x-2.5">
+          <span className="font-sans font-bold text-white tracking-wider">PGM 01</span>
+          <span className="text-zinc-600">|</span>
+          <span className="font-mono text-[11px] text-zinc-300">4K UHD @ {fps.toFixed(2)} FPS</span>
         </div>
-        <div className="flex items-center space-x-3 text-zinc-400">
+
+        <div className="flex items-center space-x-3 text-zinc-400 text-[11px]">
+          <span className="font-sans">Source: <strong className="text-zinc-200">CAM A</strong></span>
+          <span className="text-zinc-600">|</span>
+          <span className="font-sans">
+            Ingest: <strong className="font-mono text-zinc-200">{encoderName.split("-").slice(-2).join("-")}</strong>
+          </span>
+          <span className="text-zinc-600">|</span>
           <button
             onClick={() => setShowSafeAreas(!showSafeAreas)}
-            className={`flex items-center space-x-1 px-1.5 py-0.5 rounded text-[10px] transition ${
-              showSafeAreas ? "bg-zinc-800 text-zinc-200" : "text-zinc-500 hover:text-zinc-300"
-            }`}
+            className="flex items-center space-x-1 text-zinc-400 hover:text-zinc-200 transition cursor-pointer"
+            title="Toggle broadcast safe guides"
           >
-            <Eye className="w-3 h-3" />
-            <span>Safe Guides</span>
+            {showSafeAreas ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+            <span className="font-sans">Safe Area</span>
           </button>
-          <span>INGEST: <strong className="text-zinc-200">{primaryEncoder.split("-").slice(-2).join("-")}</strong></span>
-          <span className="text-zinc-600">|</span>
-          <span className="text-emerald-400 font-bold">GENLOCK 59.94Hz</span>
         </div>
       </div>
 
-      {/* 16:9 Viewport Area */}
-      <div className={`relative aspect-video w-full bg-black overflow-hidden select-none ${isDegraded ? "glitch-active" : ""}`}>
-        {/* Cinema Video Background Simulation */}
-        <div className="absolute inset-0 bg-gradient-to-tr from-zinc-950 via-zinc-900 to-black flex items-center justify-center">
-          {/* Animated Ambient Cinema Glow */}
-          <div className="absolute w-80 h-80 rounded-full bg-blue-600/10 blur-[120px] pointer-events-none" />
-          <div className="absolute w-96 h-96 rounded-full bg-red-600/10 blur-[140px] pointer-events-none" />
-
-          {/* Central Broadcast Slate */}
-          <div className="relative z-10 flex flex-col items-center text-center px-4">
-            <div className="w-14 h-14 rounded-full bg-zinc-900/90 border border-zinc-700/80 flex items-center justify-center mb-3 shadow-[0_0_20px_rgba(0,0,0,0.8)]">
-              <Film className="w-7 h-7 text-zinc-300" />
-            </div>
-            <h3 className="text-lg md:text-xl font-bold tracking-tight text-white font-sans">
-              "THE PROMETHEUS PROTOCOL"
-            </h3>
-            <p className="text-xs text-zinc-400 font-mono mt-0.5">
-              GLOBAL CINEMA PREMIERE • SATELLITE 12G-SDI FEED
-            </p>
-            <div className="mt-3 flex items-center space-x-2 text-[10px] font-mono text-zinc-400 bg-zinc-950/80 px-3 py-1 rounded border border-zinc-800">
-              <span>COLOR: REC.709 10-BIT</span>
-              <span>•</span>
-              <span>AUDIO: 5.1 SURROUND</span>
-              <span>•</span>
-              <span className={isDegraded ? "text-red-400 font-bold" : "text-emerald-400"}>
-                BITRATE: {isDegraded ? "8.15 Mbps (THROTTLED)" : "12.48 Mbps"}
-              </span>
-            </div>
-          </div>
+      {/* 16:9 Cinema Master Feed Viewport (Clean, Uncluttered Image) */}
+      <div className={`relative aspect-video w-full bg-black overflow-hidden select-none ${isDegraded ? "feed-degraded" : ""}`}>
+        {/* Cinema Video Background */}
+        <div className="absolute inset-0 overflow-hidden">
+          <img
+            src="/assets/cinema_stage.jpg"
+            alt="Live Cinema Production Feed"
+            className="w-full h-full object-cover brightness-95 contrast-105"
+          />
+          {/* Subtle natural cinema vignette */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/30 pointer-events-none" />
         </div>
 
-        {/* 90% Action Safe / 80% Title Safe Framing Guides */}
+        {/* Framing Safe Area Guides (Authentic 90% broadcast action-safe) */}
         {showSafeAreas && (
-          <div className="absolute inset-0 pointer-events-none z-20 flex items-center justify-center">
-            {/* 90% Action Safe Guide */}
-            <div className="w-[90%] h-[90%] border border-zinc-500/20 border-dashed rounded-xs relative">
-              <span className="absolute top-1 left-1 text-[8px] text-zinc-500/40 uppercase">Action Safe 90%</span>
-            </div>
-            {/* 80% Title Safe Guide */}
-            <div className="w-[80%] h-[80%] border border-zinc-500/30 rounded-xs absolute">
-              <span className="absolute top-1 left-1 text-[8px] text-zinc-500/50 uppercase">Title Safe 80%</span>
+          <div className="absolute inset-0 pointer-events-none z-10 flex items-center justify-center">
+            <div className="w-[90%] h-[90%] border border-white/25 border-dashed relative">
+              <span className="absolute top-1 left-2 text-[9px] text-white/40 tracking-widest font-mono">
+                90% ACTION SAFE
+              </span>
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3">
+                <div className="absolute top-0 bottom-0 left-1/2 w-[1px] bg-white/30" />
+                <div className="absolute left-0 right-0 top-1/2 h-[1px] bg-white/30" />
+              </div>
             </div>
           </div>
         )}
 
-        {/* Incident Degradation Banner */}
+        {/* Restrained Operational Fault Banner (Answers: "What is wrong?") */}
         {isDegraded && (
-          <div className="absolute inset-x-0 top-1/3 z-30 bg-red-950/90 border-y border-red-500 px-4 py-3 flex items-center justify-between backdrop-blur-md animate-pulse">
+          <div className="absolute inset-x-0 top-3 z-30 mx-4 px-4 py-2.5 rounded bg-black/90 border border-red-500/80 backdrop-blur-sm flex items-center justify-between shadow-lg">
             <div className="flex items-center space-x-3">
-              <AlertOctagon className="w-6 h-6 text-red-400 animate-bounce" />
+              <div className="w-7 h-7 rounded bg-red-950/80 border border-red-500/60 flex items-center justify-center">
+                <AlertTriangle className="w-4 h-4 text-red-400" />
+              </div>
               <div>
-                <h4 className="text-xs font-bold text-white tracking-wide">
-                  HARDWARE BUFFER OVERRUN • PACKET DROP CASCADE
+                <h4 className="text-xs font-sans font-bold text-white tracking-wide">
+                  {faultHeadline}
                 </h4>
-                <p className="text-[11px] text-red-200">
-                  PTS desync: +{ptsDrift}ms • UDP loss: {packetLoss}% • Frame rate: {fps} FPS
+                <p className="text-[11px] font-mono text-zinc-300">
+                  {faultDetail}
                 </p>
               </div>
             </div>
-            <span className="text-[10px] font-bold px-2 py-1 bg-red-900 text-red-100 border border-red-700 rounded">
-              FAILOVER ARMED
-            </span>
+            <div className="text-right">
+              <span className="text-[10px] font-sans font-semibold px-2 py-0.5 rounded bg-red-900/60 text-red-200 border border-red-700/60">
+                {isInvestigating ? "Triage in progress" : "Failover armed"}
+              </span>
+            </div>
           </div>
         )}
 
-        {/* CRT Scanline Layer */}
-        <div className="scanlines absolute inset-0 z-20 pointer-events-none" />
+        {/* Investigating State Bar (When diagnosing but before critical fault threshold) */}
+        {isInvestigating && !isDegraded && (
+          <div className="absolute inset-x-0 top-3 z-30 mx-4 px-3.5 py-1.5 rounded bg-black/90 border border-amber-500/60 backdrop-blur-sm flex items-center justify-between text-xs">
+            <div className="flex items-center space-x-2 text-amber-300 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+              <span className="font-sans">Investigating telemetry anomaly via Grafana MCP...</span>
+            </div>
+          </div>
+        )}
 
-        {/* Top-Left OSD Tally Light */}
-        <div className="absolute top-3 left-3 z-20 flex items-center space-x-2 bg-black/80 border border-zinc-800 px-2 py-1 rounded text-[10px]">
-          <span className={`w-2 h-2 rounded-full ${isDegraded ? "bg-red-500 animate-ping" : "bg-red-500"}`} />
-          <span className="text-white font-bold">PGM • CAM A</span>
-        </div>
+        {/* Disconnected State Overlay */}
+        {!isConnected && (
+          <div className="absolute inset-0 z-40 bg-black/85 backdrop-blur-xs flex flex-col items-center justify-center text-center p-4">
+            <span className="text-amber-400 text-sm font-sans font-semibold mb-1">Telemetry Pipeline Offline</span>
+            <p className="text-zinc-400 text-xs max-w-xs font-sans">
+              FastAPI backend stream disconnected at http://localhost:8001. Attempting automatic reconnection...
+            </p>
+          </div>
+        )}
 
-        {/* Top-Right Running SMPTE Timecode */}
-        <div className="absolute top-3 right-3 z-20 bg-black/80 border border-zinc-800 px-2.5 py-1 rounded text-xs text-emerald-400 font-bold tracking-wider">
-          {timecode}
-        </div>
-
-        {/* Bottom Audio Frequency Visualizer Canvas */}
-        <div className="absolute bottom-3 left-3 z-20 bg-black/80 border border-zinc-800 px-2.5 py-1.5 rounded flex items-center space-x-2">
+        {/* Bottom-Left Audio Spectrum Visualizer (Functional, minimal broadcast audio instrumentation) */}
+        <div className="absolute bottom-3 left-3 z-20 bg-black/80 border border-zinc-800 px-2.5 py-1 rounded flex items-center space-x-2">
           <Volume2 className="w-3.5 h-3.5 text-zinc-400" />
-          <canvas ref={canvasRef} width={130} height={20} className="rounded" />
-          <span className="text-[9px] text-zinc-400 font-bold">5.1 CH</span>
+          <canvas ref={canvasRef} width={110} height={16} className="rounded" />
+          <span className="font-mono text-[9px] text-zinc-400 font-semibold">5.1 CH</span>
         </div>
+      </div>
 
-        {/* Bottom-Right Stream Health Badge */}
-        <div className="absolute bottom-3 right-3 z-20 flex items-center space-x-1.5 bg-black/80 border border-zinc-800 px-2 py-1 rounded text-[10px]">
-          <span className={`w-2 h-2 rounded-full ${isDegraded ? "bg-red-500 animate-pulse" : "bg-emerald-500"}`} />
-          <span className={isDegraded ? "text-red-400 font-bold" : "text-zinc-300"}>
-            {isDegraded ? "SLA BREACHED" : "LIP-SYNC LOCKED"}
+      {/* Monitor Footer Strip: Clean Stream Metadata (No redundant resolution or duplicate metrics) */}
+      <div className="bg-[#101014] border-t border-[#27272a] px-3.5 py-2 flex items-center justify-between text-xs text-zinc-400">
+        <div className="flex items-center space-x-3 font-mono text-[11px]">
+          <span>Format: <strong className="text-zinc-200">HEVC Main 10 (10-bit 4:2:2)</strong></span>
+          <span className="text-zinc-700">•</span>
+          <span>Color: <strong className="text-zinc-200">BT.2020 WCG</strong></span>
+          <span className="text-zinc-700">•</span>
+          <span>Audio: <strong className="text-zinc-200">SMPTE ST 2110-30</strong></span>
+        </div>
+        <div className="flex items-center space-x-2 font-mono text-[11px]">
+          <span className="text-zinc-500">Genlock:</span>
+          <span className={isDegraded && activeScenario === "genlock_clock_drift" ? "text-amber-400 font-bold" : "text-emerald-400 font-semibold"}>
+            {isDegraded && activeScenario === "genlock_clock_drift" ? "PTP Jitter 48.5µs" : "PTP Locked (1.1µs)"}
           </span>
         </div>
       </div>

@@ -43,6 +43,10 @@ async def get_live_telemetry():
 async def get_topology():
     return telemetry_engine.get_topology()
 
+@app.post("/api/telemetry/inject-anomaly")
+async def inject_anomaly():
+    return telemetry_engine.inject_scenario("nvenc_buffer_overflow")
+
 @app.post("/api/telemetry/inject-scenario")
 async def inject_scenario(scenario: str = Query("nvenc_buffer_overflow")):
     return telemetry_engine.inject_scenario(scenario)

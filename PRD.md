@@ -25,7 +25,7 @@ Live entertainment broadcasts—the Academy Awards (Oscars) telecast, Netflix Li
   2. Audio and Video Presentation Timestamps (PTS) drift apart by **+842ms**, causing jarring lip-sync desynchronization.
   3. UDP frame drops spike to **14.8%**, inducing severe macroblocking across millions of downstream smart TV clients.
 * **The Cognitive Overload**: In physical Master Control Rooms (MCRs), human technical directors take **8 to 15 minutes** to manually cross-correlate dozens of fragmented Grafana dashboards, Prometheus time-series alerts, and Loki log streams to isolate the malfunctioning pod and execute an SDI/IP video router failover.
-* **The Solution**: **DirectorOps** replaces human triage latency with an autonomous Master Control Room Incident Commander powered by **Google Cloud Gemini 2.0** multi-turn ReAct reasoning and the official **Grafana Cloud Model Context Protocol (MCP)** server.
+* **The Solution**: **DirectorOps** replaces human triage latency with an autonomous Master Control Room Incident Commander powered by **Google Cloud Gemini 3.8 Flash** multi-turn ReAct reasoning and the official **Grafana Cloud Model Context Protocol (MCP)** server.
 
 ---
 
@@ -42,7 +42,7 @@ Live entertainment broadcasts—the Academy Awards (Oscars) telecast, Netflix Li
 ## 3. Sponsor Alignment & Compliance Matrix
 
 ### 3.1 Google Cloud AI Track Compliance
-- **Permitted LLM**: Exclusively uses Google Cloud AI (`google-genai` SDK / Gemini 2.0 Flash / Gemini 2.0 Pro).
+- **Permitted LLM**: Exclusively uses Google Cloud AI (`google-genai` SDK / Gemini 3.8 Flash).
 - **Tool Calling Architecture**: Uses native Google Gemini function declarations (`types.FunctionDeclaration`) to invoke Grafana MCP tools.
 - **Strict Compliance**: Zero usage of prohibited model providers (OpenAI, Anthropic, AWS Bedrock).
 
@@ -77,17 +77,17 @@ Live entertainment broadcasts—the Academy Awards (Oscars) telecast, Netflix Li
                                                                        │
                                                        ┌───────────────┴───────────────┐
                                                        ▼                               ▼
-                                             ┌───────────────────┐           ┌───────────────────┐
-                                             │  Google Cloud AI  │           │ Grafana Cloud MCP │
-                                             │  Gemini 2.0 Flash │           │ PromQL / LogQL    │
-                                             └───────────────────┘           └───────────────────┘
+                                              ┌───────────────────┐           ┌───────────────────┐
+                                              │  Google Cloud AI  │           │ Grafana Cloud MCP │
+                                              │  Gemini 3.8 Flash │           │ PromQL / LogQL    │
+                                              └───────────────────┘           └───────────────────┘
 ```
 
 ### 4.1 Backend Engine (`backend/app/`)
 1. **`config.py`**: Pydantic v2 configuration schema supporting zero-config `DEMO_MODE=true` and live production API keys (`GEMINI_API_KEY`, `GRAFANA_SA_TOKEN`, `GRAFANA_URL`).
 2. **`telemetry/telemetry_engine.py`**: Broadcast infrastructure simulation generating live SMPTE telemetry across ingest cameras, primary/standby transcoding pods, origin packagers, and CDN edge egress.
 3. **`mcp/grafana_mcp.py`**: Official Grafana Cloud MCP JSON-RPC 2.0 client supporting bidirectional tool discovery and query execution.
-4. **`agent/mcr_agent.py`**: Google Cloud Gemini 2.0 multi-turn ReAct orchestrator managing prompt construction, tool execution, decision synthesis, and mitigation verification.
+4. **`agent/mcr_agent.py`**: Google Cloud Gemini 3.8 Flash multi-turn ReAct orchestrator managing prompt construction, tool execution, decision synthesis, and mitigation verification.
 5. **`receipts/proof_engine.py`**: Cryptographic receipt generator producing SHA-256 state digests and HMAC signatures for indisputable SLA compliance audits.
 6. **`main.py`**: High-performance FastAPI router serving REST management endpoints and real-time Server-Sent Events (SSE) to the frontend.
 
@@ -117,7 +117,7 @@ Live entertainment broadcasts—the Academy Awards (Oscars) telecast, Netflix Li
 - The system MUST provide `create_annotation` to post timestamped mitigation events to Grafana dashboards.
 
 ### FR3: Autonomous Investigation & Decision Loop
-- The system MUST orchestrate an agentic ReAct loop using Google Cloud Gemini 2.0.
+- The system MUST orchestrate an agentic ReAct loop using Google Cloud Gemini 3.8 Flash.
 - The agent MUST inspect the active incident alert, formulate diagnostic PromQL/LogQL queries, evaluate tool responses, and autonomously decide whether to execute an SDI/IP video ingest failover.
 - The system MUST complete the autonomous diagnosis and failover in under 3.0 seconds.
 

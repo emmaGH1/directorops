@@ -41,3 +41,7 @@ Thumbs.db
 # Temporary hackathon scratch
 hackathon_details.txt
 step_*_text.txt
+
+# Binaries
+*.exe
+backend/bin/

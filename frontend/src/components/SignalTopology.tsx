@@ -1,15 +1,15 @@
 "use client";
 
 import React from "react";
-import { Server, Radio, Cpu, Globe, CheckCircle2, AlertTriangle, ArrowRight } from "lucide-react";
+import { Radio, Cpu, Server, Globe, CheckCircle2, AlertTriangle, Clock } from "lucide-react";
 
 interface TopologyProps {
   status: string;
   activeScenario: string | null;
   primaryEncoder: string;
   standbyEncoder: string;
-  originServer: string;
-  cdnEdge: string;
+  originServer?: string;
+  cdnEdge?: string;
 }
 
 export const SignalTopology: React.FC<TopologyProps> = ({
@@ -17,164 +17,221 @@ export const SignalTopology: React.FC<TopologyProps> = ({
   activeScenario,
   primaryEncoder,
   standbyEncoder,
-  originServer,
-  cdnEdge
+  originServer = "origin-packager-01",
+  cdnEdge = "edge-ingress-na-east",
 }) => {
   const isDegraded = status === "DEGRADED";
-  const isEnc01Active = primaryEncoder === "transcoder-pod-us-east-01";
+  const isRecovered = status === "RECOVERED";
+  const isEnc01Active = primaryEncoder.includes("01");
+
+  const isNvencFault = isDegraded && (!activeScenario || activeScenario === "nvenc_buffer_overflow");
+  const isCdnFault = isDegraded && activeScenario === "cdn_edge_502";
+  const isGenlockFault = isDegraded && activeScenario === "genlock_clock_drift";
 
   return (
-    <div className="w-full h-full rounded-lg border border-[#27272a] bg-[#121215] p-4 flex flex-col justify-between shadow-xl font-mono relative overflow-hidden">
-      {/* Card Header */}
-      <div className="flex items-center justify-between border-b border-[#27272a] pb-2.5 mb-3">
+    <div className="w-full rounded-md border border-[#27272a] bg-[#121215] p-3.5 flex flex-col font-sans">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-[#27272a] pb-2 mb-3">
         <div className="flex items-center space-x-2">
-          <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-          <span className="text-xs font-bold text-zinc-200">SIGNAL ROUTING TOPOLOGY (PVW 01)</span>
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${
+              isDegraded ? "bg-red-500" : isRecovered ? "bg-emerald-500" : "bg-zinc-400"
+            }`}
+          />
+          <h3 className="text-xs font-semibold text-zinc-200">
+            Signal Path Topology
+          </h3>
         </div>
-        <span className="text-[10px] text-zinc-500 uppercase tracking-wider">
-          {isDegraded ? "INCIDENT REROUTE ARMED" : "PRIMARY PATH LOCKED"}
-        </span>
+        <div className="flex items-center space-x-2">
+          <span className="text-[10px] text-zinc-500 font-mono">
+            Virtual SDI Matrix
+          </span>
+          <span className="text-zinc-700">•</span>
+          <span
+            className={`text-[10px] font-medium ${
+              isDegraded ? "text-red-400" : isRecovered ? "text-emerald-400" : "text-zinc-400"
+            }`}
+          >
+            {isDegraded ? "Failover armed" : isRecovered ? "Rerouted to Standby" : "Nominal route"}
+          </span>
+        </div>
       </div>
 
-      {/* SVG Topology Visualizer */}
-      <div className="relative flex-1 flex items-center justify-between px-2 py-4">
-        {/* Animated Connecting Bezier Lines */}
+      {/* Clean, Minimal SVG Signal Graph */}
+      <div className="relative py-2 px-1 flex items-center justify-between min-h-[140px]">
+        {/* Minimal SVG Connecting Lines */}
         <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 0 }}>
-          <defs>
-            <linearGradient id="activeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#10b981" stopOpacity="0.8" />
-              <stop offset="100%" stopColor="#10b981" stopOpacity="0.2" />
-            </linearGradient>
-            <linearGradient id="faultGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#ef4444" stopOpacity="0.8" />
-              <stop offset="100%" stopColor="#ef4444" stopOpacity="0.2" />
-            </linearGradient>
-            <linearGradient id="failoverGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#3b82f6" stopOpacity="0.8" />
-              <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.2" />
-            </linearGradient>
-          </defs>
-
-          {/* Path from Cam A to Primary Enc */}
+          {/* Path to ENC 01 (top) */}
           <path
-            d={isEnc01Active ? "M 70 80 Q 140 40, 210 45" : "M 70 80 Q 140 120, 210 115"}
-            stroke={isDegraded ? "url(#faultGrad)" : "url(#activeGrad)"}
-            strokeWidth="2.5"
-            strokeDasharray={isDegraded ? "4 4" : "none"}
+            d="M 45 70 C 80 70, 95 38, 120 38"
+            stroke={isNvencFault ? "#ef4444" : isEnc01Active ? "#a1a1aa" : "#3f3f46"}
+            strokeWidth={isEnc01Active ? 2 : 1}
+            strokeDasharray={!isEnc01Active ? "3 3" : "none"}
+            opacity={isEnc01Active ? 1 : 0.35}
             fill="none"
-            className={isDegraded ? "animate-pulse" : ""}
           />
 
-          {/* Path from Primary Enc to Origin */}
+          {/* Path to ENC 02 (bottom) */}
           <path
-            d={isEnc01Active ? "M 280 45 Q 350 40, 420 80" : "M 280 115 Q 350 120, 420 80"}
-            stroke={isDegraded && activeScenario === "cdn_edge_502" ? "url(#faultGrad)" : "url(#activeGrad)"}
-            strokeWidth="2.5"
-            strokeDasharray={isDegraded && activeScenario === "cdn_edge_502" ? "4 4" : "none"}
+            d="M 45 70 C 80 70, 95 102, 120 102"
+            stroke={!isEnc01Active ? "#10b981" : "#3f3f46"}
+            strokeWidth={!isEnc01Active ? 2 : 1}
+            strokeDasharray={isEnc01Active ? "3 3" : "none"}
+            opacity={!isEnc01Active ? 1 : 0.35}
+            fill="none"
+          />
+
+          {/* Path from ENC 01 to Origin */}
+          <path
+            d="M 225 38 C 255 38, 265 70, 290 70"
+            stroke={isEnc01Active ? (isNvencFault ? "#ef4444" : "#a1a1aa") : "#3f3f46"}
+            strokeWidth={isEnc01Active ? 2 : 1}
+            strokeDasharray={!isEnc01Active ? "3 3" : "none"}
+            opacity={isEnc01Active ? 1 : 0.35}
+            fill="none"
+          />
+
+          {/* Path from ENC 02 to Origin */}
+          <path
+            d="M 225 102 C 255 102, 265 70, 290 70"
+            stroke={!isEnc01Active ? "#10b981" : "#3f3f46"}
+            strokeWidth={!isEnc01Active ? 2 : 1}
+            strokeDasharray={isEnc01Active ? "3 3" : "none"}
+            opacity={!isEnc01Active ? 1 : 0.35}
             fill="none"
           />
 
           {/* Path from Origin to CDN Edge */}
           <path
-            d="M 490 80 L 560 80"
-            stroke={isDegraded && activeScenario === "cdn_edge_502" ? "url(#faultGrad)" : "url(#activeGrad)"}
-            strokeWidth="2.5"
+            d="M 330 70 L 368 70"
+            stroke={isCdnFault ? "#ef4444" : "#a1a1aa"}
+            strokeWidth={2}
+            strokeDasharray={isCdnFault ? "3 3" : "none"}
+            opacity={isCdnFault ? 0.8 : 1}
             fill="none"
           />
         </svg>
 
         {/* Node 1: Camera Source */}
         <div className="relative z-10 flex flex-col items-center">
-          <div className="w-12 h-12 rounded-lg bg-zinc-900 border border-zinc-700 flex items-center justify-center shadow-lg group hover:border-emerald-500 transition">
-            <Radio className="w-5 h-5 text-emerald-400" />
+          <div className="w-9 h-9 rounded bg-[#18181c] border border-zinc-700 flex items-center justify-center text-zinc-200">
+            <Radio className="w-4 h-4 text-zinc-300" />
           </div>
-          <span className="text-[10px] font-bold text-zinc-300 mt-2">CAM RIG A</span>
-          <span className="text-[9px] text-zinc-500">4K 12G-SDI</span>
+          <span className="text-[10px] font-semibold text-zinc-200 mt-1">CAM A</span>
+          <span className="text-[9px] text-zinc-500 font-mono">12G-SDI</span>
         </div>
 
-        {/* Node Column 2: Dual Encoders (Primary & Standby) */}
-        <div className="relative z-10 flex flex-col space-y-5">
+        {/* Node Column 2: Dual Transcoders (ENC 01 & ENC 02) */}
+        <div className="relative z-10 flex flex-col space-y-3">
           {/* ENC 01 */}
-          <div className={`p-2.5 rounded-lg border transition-all duration-300 flex items-center space-x-2.5 ${
-            isEnc01Active
-              ? isDegraded && activeScenario === "nvenc_buffer_overflow"
-                ? "bg-red-950/60 border-red-500 shadow-[0_0_15px_rgba(239,68,68,0.3)] animate-pulse"
-                : "bg-zinc-900/90 border-emerald-500/80 shadow-[0_0_12px_rgba(16,185,129,0.2)]"
-              : "bg-zinc-950/60 border-zinc-800 opacity-60"
-          }`}>
-            <Cpu className={`w-4 h-4 ${isEnc01Active ? isDegraded ? "text-red-400" : "text-emerald-400" : "text-zinc-500"}`} />
+          <div
+            className={`px-2.5 py-1.5 rounded border text-xs flex items-center space-x-2 transition ${
+              isEnc01Active
+                ? isNvencFault
+                  ? "bg-red-950/40 border-red-500/80 text-white"
+                  : "bg-[#18181c] border-zinc-500 text-white"
+                : "bg-[#101014] border-zinc-800 text-zinc-500 opacity-50"
+            }`}
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                isNvencFault && isEnc01Active
+                  ? "bg-red-500"
+                  : isEnc01Active
+                  ? "bg-emerald-400"
+                  : "bg-zinc-600"
+              }`}
+            />
             <div>
               <div className="flex items-center space-x-1.5">
-                <span className="text-[11px] font-bold text-zinc-200">ENC 01</span>
-                {isEnc01Active && isDegraded ? (
-                  <span className="text-[8px] bg-red-900 text-red-200 px-1 py-0.2 rounded">FAULT</span>
-                ) : isEnc01Active ? (
-                  <span className="text-[8px] bg-emerald-950 text-emerald-300 px-1 py-0.2 rounded border border-emerald-800">PRIMARY</span>
-                ) : (
-                  <span className="text-[8px] bg-zinc-800 text-zinc-400 px-1 py-0.2 rounded">DRAINED</span>
+                <span className="font-semibold text-[11px]">ENC 01</span>
+                {isEnc01Active && isNvencFault && (
+                  <span className="text-[9px] text-red-400 font-mono">FAULT</span>
+                )}
+                {isEnc01Active && !isNvencFault && (
+                  <span className="text-[9px] text-zinc-400 font-mono">ACTIVE</span>
+                )}
+                {!isEnc01Active && (
+                  <span className="text-[9px] text-zinc-500 font-mono">STANDBY</span>
                 )}
               </div>
-              <span className="text-[9px] text-zinc-500 block">NVENC Pod US-East-01</span>
+              <span className="text-[9px] text-zinc-400 font-mono block">pod-us-east-01</span>
             </div>
           </div>
 
-          {/* ENC 02 (Standby) */}
-          <div className={`p-2.5 rounded-lg border transition-all duration-300 flex items-center space-x-2.5 ${
-            !isEnc01Active
-              ? "bg-zinc-900/90 border-emerald-500/80 shadow-[0_0_12px_rgba(16,185,129,0.2)]"
-              : "bg-zinc-950/60 border-zinc-800"
-          }`}>
-            <Cpu className={`w-4 h-4 ${!isEnc01Active ? "text-emerald-400" : "text-zinc-500"}`} />
+          {/* ENC 02 */}
+          <div
+            className={`px-2.5 py-1.5 rounded border text-xs flex items-center space-x-2 transition ${
+              !isEnc01Active
+                ? "bg-emerald-950/30 border-emerald-500/80 text-white"
+                : "bg-[#101014] border-zinc-800 text-zinc-500 opacity-60"
+            }`}
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                !isEnc01Active ? "bg-emerald-400" : "bg-zinc-600"
+              }`}
+            />
             <div>
               <div className="flex items-center space-x-1.5">
-                <span className="text-[11px] font-bold text-zinc-200">ENC 02</span>
+                <span className="font-semibold text-[11px]">ENC 02</span>
                 {!isEnc01Active ? (
-                  <span className="text-[8px] bg-emerald-950 text-emerald-300 px-1 py-0.2 rounded border border-emerald-800">ACTIVE</span>
+                  <span className="text-[9px] text-emerald-400 font-mono">HOT FAILOVER</span>
                 ) : (
-                  <span className="text-[8px] bg-cyan-950 text-cyan-300 px-1 py-0.2 rounded border border-cyan-800">HOT STANDBY</span>
+                  <span className="text-[9px] text-zinc-500 font-mono">STANDBY</span>
                 )}
               </div>
-              <span className="text-[9px] text-zinc-500 block">NVENC Pod US-East-02</span>
+              <span className="text-[9px] text-zinc-400 font-mono block">pod-us-east-02</span>
             </div>
           </div>
         </div>
 
         {/* Node 3: Origin Packager */}
         <div className="relative z-10 flex flex-col items-center">
-          <div className={`w-12 h-12 rounded-lg border flex items-center justify-center shadow-lg transition ${
-            isDegraded && activeScenario === "cdn_edge_502"
-              ? "bg-red-950 border-red-500 animate-pulse text-red-400"
-              : "bg-zinc-900 border-zinc-700 text-zinc-300 hover:border-cyan-500"
-          }`}>
-            <Server className="w-5 h-5" />
+          <div
+            className={`w-9 h-9 rounded border flex items-center justify-center transition ${
+              isCdnFault
+                ? "bg-red-950/40 border-red-500/80 text-red-300"
+                : "bg-[#18181c] border-zinc-700 text-zinc-300"
+            }`}
+          >
+            <Server className="w-4 h-4" />
           </div>
-          <span className="text-[10px] font-bold text-zinc-300 mt-2">ORIGIN</span>
-          <span className="text-[9px] text-zinc-500">HLS/DASH Ingest</span>
+          <span className="text-[10px] font-semibold text-zinc-200 mt-1">ORIGIN</span>
+          <span className="text-[9px] text-zinc-500 font-mono">HLS/DASH</span>
         </div>
 
         {/* Node 4: CDN Edge */}
         <div className="relative z-10 flex flex-col items-center">
-          <div className={`w-12 h-12 rounded-lg border flex items-center justify-center shadow-lg transition ${
-            isDegraded && activeScenario === "cdn_edge_502"
-              ? "bg-red-950 border-red-500 animate-pulse text-red-400"
-              : "bg-zinc-900 border-zinc-700 text-zinc-300 hover:border-emerald-500"
-          }`}>
-            <Globe className="w-5 h-5" />
+          <div
+            className={`w-9 h-9 rounded border flex items-center justify-center transition ${
+              isCdnFault
+                ? "bg-red-950/40 border-red-500/80 text-red-300"
+                : "bg-[#18181c] border-zinc-700 text-zinc-300"
+            }`}
+          >
+            <Globe className="w-4 h-4" />
           </div>
-          <span className="text-[10px] font-bold text-zinc-300 mt-2">CDN EDGE</span>
-          <span className="text-[9px] text-zinc-500">Global Theaters</span>
+          <span className="text-[10px] font-semibold text-zinc-200 mt-1">CDN EDGE</span>
+          <span className="text-[9px] text-zinc-500 font-mono">Egress</span>
         </div>
       </div>
 
-      {/* Bottom Route Status Banner */}
-      <div className="mt-2 pt-2 border-t border-[#27272a] flex items-center justify-between text-[10px] text-zinc-400">
+      {/* Footer Strip */}
+      <div className="border-t border-[#27272a] pt-2 mt-2 flex items-center justify-between text-[10px] text-zinc-400">
         <div className="flex items-center space-x-1.5">
-          <span className="text-zinc-500">ACTIVE INGEST:</span>
-          <span className="font-bold text-zinc-200">{primaryEncoder}</span>
+          <span className="text-zinc-500">Active Encoder:</span>
+          <span className="font-mono text-zinc-200 font-semibold">{primaryEncoder}</span>
         </div>
-        <div className="flex items-center space-x-1 text-emerald-400 font-bold">
-          <CheckCircle2 className="w-3 h-3" />
-          <span>GENLOCK: PTP LOCKED (1.1μs)</span>
+        <div className="flex items-center space-x-1.5">
+          <span
+            className={`w-1.5 h-1.5 rounded-full ${
+              isGenlockFault ? "bg-amber-400" : "bg-emerald-400"
+            }`}
+          />
+          <span className={isGenlockFault ? "text-amber-400 font-medium" : "text-zinc-400"}>
+            {isGenlockFault ? "PTP Drift: 48.5µs" : "PTP Synced: 1.1µs"}
+          </span>
         </div>
       </div>
     </div>

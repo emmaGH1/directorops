@@ -41,8 +41,7 @@
 5. [Sponsor Technology Deep-Dive: Grafana Cloud MCP](#sponsor-technology-deep-dive-grafana-cloud-mcp)
 6. [The Honesty Table](#the-honesty-table)
 7. [Automated Test Suite & Verification](#automated-test-suite--verification)
-8. [The 3-Minute Pitch Video Script](#the-3-minute-pitch-video-script)
-9. [Local Quickstart & Reproduction](#local-quickstart--reproduction)
+8. [Local Quickstart & Reproduction](#local-quickstart--reproduction)
 
 ---
 
@@ -177,7 +176,7 @@ In accordance with elite hackathon engineering, here is our full disclosure:
 | :--- | :--- | :--- | :--- |
 | **Grafana Cloud MCP Server** | Real authenticated calls to Grafana Cloud MCP via Service Account Token (`glsa_...`), real annotations written to live dashboard via API | Interactive OAuth browser session (replaced by Service Account Token for headless execution) | [`backend/app/mcp/grafana_mcp.py`](backend/app/mcp/grafana_mcp.py) |
 | **Prometheus & Loki Observability** | Real HTTP pushes to Grafana Cloud OTLP metrics and Loki log streams; real PromQL and LogQL queries | Hollywood 4K theatrical satellite traffic volume (synthetically generated via broadcast simulator) | [`backend/app/telemetry/telemetry_engine.py`](backend/app/telemetry/telemetry_engine.py) |
-| **Google Cloud Gemini ADK** | Multi-step agent reasoning loop, tool invocation planning, structured hypothesis formulation, and failover commands | Enterprise LLM rate-limit bypass (using standard Gemini 2.0 Flash / Pro quota) | [`backend/app/agent/mcr_agent.py`](backend/app/agent/mcr_agent.py) |
+| **Google Cloud Gemini ADK** | Multi-step agent reasoning loop, tool invocation planning, structured hypothesis formulation, and failover commands | Enterprise LLM rate-limit bypass (using standard Gemini 3.8 Flash quota) | [`backend/app/agent/mcr_agent.py`](backend/app/agent/mcr_agent.py) |
 | **Cryptographic Proofs & Receipts** | Real SHA-256 telemetry digest calculation, HMAC-SHA256 signature generation and cryptographic tamper verification | On-chain blockchain anchoring (anchored as tamper-evident cryptographic JSON receipt) | [`backend/app/receipts/proof_engine.py`](backend/app/receipts/proof_engine.py) |
 | **Master Control Room Switcher** | 100% functional Next.js 15 App Router console, Server-Sent Events (SSE) live streaming terminal, real-time HUD gauges | Physical broadcast SDI video hardware matrix switchers | [`frontend/src/app/page.tsx`](frontend/src/app/page.tsx) |
 | **Standalone CPU Reproduction** | Deterministic CPU reproduction script executing the full Grafana PromQL/LogQL and receipt verification in under 5ms | Live cloud network roundtrip latency (<5ms on local CPU vs ~300ms on WAN) | [`verify_in_60s.py`](verify_in_60s.py) |
@@ -206,22 +205,6 @@ tests/test_telemetry.py::test_telemetry_state_transitions PASSED         [100%]
 
 ======================== 4 passed, 1 warning in 4.79s =========================
 ```
-
----
-
-## The 3-Minute Pitch Video Script
-
-* **0:00–0:30 (The High-Stakes Hook)**:
-  *"When Netflix streamed the live Love is Blind reunion or the Tyson fight, millions of viewers faced catastrophic stream degradation. In Hollywood and live broadcast, downtime costs \$100,000 per minute. Meet DirectorOps—the world's first Autonomous Master Control Room SRE powered by Google Cloud Gemini ADK and Grafana Cloud MCP."*
-* **0:30–1:45 (The Live Interactive Demo)**:
-  - Show the Master Control Room Switcher streaming a 4K cinema feed at 59.94 FPS.
-  - Click **"Simulate Transcode Incident"** $\to$ Screen begins glitching, frame rate plummets to 31.2 FPS, audio PTS drifts +842ms.
-  - Deploy **Gemini Incident SRE** $\to$ Watch real-time streaming terminal query PromQL metrics, isolate the NVENC buffer segfault in Loki logs, and execute automated failover.
-  - Video monitor instantly recovers to locked 59.94 FPS.
-* **1:45–2:30 (Architecture & Grafana MCP Deep-Dive)**:
-  - Walk through code in `grafana_mcp.py` and `mcr_agent.py`. Highlight load-bearing Grafana MCP tools and dashboard annotation.
-* **2:30–3:00 (The Verifier Close)**:
-  - Run `python verify_in_60s.py` in the terminal to demonstrate 100% deterministic CPU verification in 4 milliseconds.
 
 ---
 
